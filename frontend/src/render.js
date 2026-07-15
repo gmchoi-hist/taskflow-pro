@@ -60,7 +60,7 @@ function button(label, className, onClick) {
   return btn;
 }
 
-function renderHeader(root, { onAddClick }) {
+function renderHeader({ onAddClick }) {
   const title = el("h1", "text-2xl font-semibold", "TaskFlow Pro");
 
   const themeBtn = button(
@@ -68,7 +68,7 @@ function renderHeader(root, { onAddClick }) {
     "rounded-xl px-3 py-2 bg-white/60 dark:bg-slate-800/60 shadow-lg backdrop-blur border border-black/5 dark:border-white/10",
     () => {
       toggleTheme();
-      renderApp();
+      renderApp(currentHandlers);
     }
   );
 
@@ -79,12 +79,11 @@ function renderHeader(root, { onAddClick }) {
   );
 
   const actions = el("div", "flex items-center gap-2", [themeBtn, addBtn]);
-  const header = el(
+  return el(
     "header",
     "flex items-center justify-between gap-4 mb-6",
     [title, actions]
   );
-  root.append(header);
 }
 
 function renderTaskForm({ initialTask, onSubmit, onCancel }) {
@@ -208,23 +207,53 @@ function renderEditModal({ task, onSubmit, onCancel }) {
   return overlay;
 }
 
-export function renderApp({ onAddClick, onCreateSubmit, onCreateCancel, onEditSubmit, onEditCancel, onDelete }) {
-  const root = document.getElementById("app");
+let currentHandlers = null;
+let shell = null;
+let mountedFormOpen = false;
+let mountedEditingTaskId = null;
+
+function ensureShell(root) {
+  if (shell && root.contains(shell.headerSlot)) return shell;
   root.innerHTML = "";
+  const headerSlot = el("div");
+  const formSlot = el("div");
+  const listSlot = el("div", "flex flex-col gap-3");
+  const modalSlot = el("div");
+  root.append(headerSlot, formSlot, listSlot, modalSlot);
+  shell = { headerSlot, formSlot, listSlot, modalSlot };
+  mountedFormOpen = false;
+  mountedEditingTaskId = null;
+  return shell;
+}
 
-  renderHeader(root, { onAddClick });
+export function renderApp(handlers) {
+  currentHandlers = handlers;
+  const { onCreateSubmit, onCreateCancel, onEditSubmit, onEditCancel, onDelete, onAddClick } = handlers;
 
-  if (state.isCreateFormOpen()) {
-    root.append(renderTaskForm({ onSubmit: onCreateSubmit, onCancel: onCreateCancel }));
+  const root = document.getElementById("app");
+  const { headerSlot, formSlot, listSlot, modalSlot } = ensureShell(root);
+
+  headerSlot.innerHTML = "";
+  headerSlot.append(renderHeader({ onAddClick }));
+
+  // 폼 열림/닫힘 상태가 실제로 바뀔 때만 새로 만든다.
+  // 그렇지 않으면 폴링 등으로 인한 재렌더링마다 입력 중이던 값이 초기화된다.
+  const isFormOpen = state.isCreateFormOpen();
+  if (isFormOpen !== mountedFormOpen) {
+    mountedFormOpen = isFormOpen;
+    formSlot.innerHTML = "";
+    if (isFormOpen) {
+      formSlot.append(renderTaskForm({ onSubmit: onCreateSubmit, onCancel: onCreateCancel }));
+    }
   }
 
   const tasks = state.getTasks();
-  const list = el("div", "flex flex-col gap-3");
+  listSlot.innerHTML = "";
   if (tasks.length === 0) {
-    list.append(el("p", "text-slate-500 dark:text-slate-400", "등록된 태스크가 없습니다."));
+    listSlot.append(el("p", "text-slate-500 dark:text-slate-400", "등록된 태스크가 없습니다."));
   } else {
     for (const task of tasks) {
-      list.append(
+      listSlot.append(
         renderTaskCard(task, {
           onCardClick: (id) => state.openEditModal(id),
           onDelete,
@@ -232,19 +261,23 @@ export function renderApp({ onAddClick, onCreateSubmit, onCreateCancel, onEditSu
       );
     }
   }
-  root.append(list);
 
+  // 수정 모달도 같은 이유로 editingTaskId가 실제로 바뀔 때만 새로 만든다.
   const editingTaskId = state.getEditingTaskId();
-  if (editingTaskId) {
-    const task = tasks.find((t) => t.id === editingTaskId);
-    if (task) {
-      root.append(
-        renderEditModal({
-          task,
-          onSubmit: (input) => onEditSubmit(task.id, input),
-          onCancel: onEditCancel,
-        })
-      );
+  if (editingTaskId !== mountedEditingTaskId) {
+    mountedEditingTaskId = editingTaskId;
+    modalSlot.innerHTML = "";
+    if (editingTaskId) {
+      const task = tasks.find((t) => t.id === editingTaskId);
+      if (task) {
+        modalSlot.append(
+          renderEditModal({
+            task,
+            onSubmit: (input) => onEditSubmit(task.id, input),
+            onCancel: onEditCancel,
+          })
+        );
+      }
     }
   }
 }

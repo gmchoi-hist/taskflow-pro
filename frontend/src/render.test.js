@@ -1,5 +1,17 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import { formatDueBadge, formatCreatedAt } from "./render.js";
+import { formatDueBadge, formatCreatedAt, renderApp } from "./render.js";
+import * as state from "./state.js";
+
+function noopHandlers() {
+  return {
+    onAddClick: () => {},
+    onCreateSubmit: async () => {},
+    onCreateCancel: () => {},
+    onEditSubmit: async () => {},
+    onEditCancel: () => {},
+    onDelete: async () => {},
+  };
+}
 
 describe("formatDueBadge", () => {
   it("due_at이 없으면 마감 없음을 반환한다", () => {
@@ -54,5 +66,44 @@ describe("formatCreatedAt", () => {
   it("일주일 이상이면 절대 날짜를 반환한다", () => {
     const createdAt = new Date(NOW.getTime() - 10 * 24 * 60 * 60_000).toISOString();
     expect(formatCreatedAt(createdAt)).toBe("2026. 07. 05.");
+  });
+});
+
+describe("renderApp 재렌더링 시 입력 폼 보존", () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="app"></div>';
+    state.setTasks([]);
+    state.closeCreateForm();
+    state.closeEditModal();
+  });
+
+  it("폼이 열린 채로 데이터만 갱신되는 재렌더링에서는 입력값이 유지된다", () => {
+    const handlers = noopHandlers();
+    state.openCreateForm();
+    renderApp(handlers);
+
+    const titleInput = document.querySelector('input[placeholder="태스크 제목"]');
+    titleInput.value = "작성 중인 제목";
+
+    // 폴링 등으로 인해 태스크 데이터만 바뀌었을 때의 재렌더링을 흉내낸다 (폼 열림 상태는 그대로).
+    state.setTasks([
+      { id: "1", title: "x", status: "todo", due_at: null, created_at: new Date().toISOString() },
+    ]);
+    renderApp(handlers);
+
+    const titleInputAfter = document.querySelector('input[placeholder="태스크 제목"]');
+    expect(titleInputAfter).toBe(titleInput);
+    expect(titleInputAfter.value).toBe("작성 중인 제목");
+  });
+
+  it("폼을 닫으면 입력 폼이 DOM에서 제거된다", () => {
+    const handlers = noopHandlers();
+    state.openCreateForm();
+    renderApp(handlers);
+    expect(document.querySelector('input[placeholder="태스크 제목"]')).not.toBeNull();
+
+    state.closeCreateForm();
+    renderApp(handlers);
+    expect(document.querySelector('input[placeholder="태스크 제목"]')).toBeNull();
   });
 });
