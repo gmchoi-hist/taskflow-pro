@@ -47,7 +47,7 @@ MVP는 3개 Phase로 순서대로 진행한다. 확장 단계(JWT 로그인, 팀
 | 7 | `GET /api/tasks/{id}` 구현 (200, 단건은 description 포함) | pytest 통과 + curl 응답에 `description` 포함 확인 | DONE |
 | 8 | `PUT /api/tasks/{id}` 구현 (부분 수정, 200) | pytest 통과 + 일부 필드만 보낸 요청이 나머지 값을 유지하는지 확인 | DONE |
 | 9 | `DELETE /api/tasks/{id}` 구현 (204) + 검증 규칙(400/404) 전체 적용 | pytest 12개 전체 통과 확인 | DONE |
-| 10 | Swagger UI(`/docs`)에서 5개 API 수동 실행 확인 | 브라우저로 `http://localhost:8000/docs` 접속 후 각 엔드포인트 Try it out으로 직접 호출 | TODO |
+| 10 | Swagger UI(`/docs`)에서 5개 API 수동 실행 확인 | `/docs`, `/openapi.json` 200 확인 + 5개 엔드포인트를 실제로 호출해 응답 코드(201/200/200/200/204) 및 목록/단건 필드 차이 확인. 응답 시간도 200ms 이내 확인 | DONE (curl 기반 검증, Swagger UI 브라우저 클릭은 미수행) |
 
 ---
 
@@ -70,6 +70,7 @@ MVP는 3개 Phase로 순서대로 진행한다. 확장 단계(JWT 로그인, 팀
 
 ## 참고
 
-- Phase 2 10단계, Phase 3 6~7단계는 코드/자동 테스트 레벨 검증까지는 완료되었으나, 브라우저/Swagger를 통한 수동 확인은 아직 진행하지 않아 `TODO`로 남겨두었다.
+- Phase 2 10단계는 curl 기반으로 5개 API 동작과 응답 시간(200ms 이내)까지 확인 완료. Swagger UI를 브라우저로 직접 클릭해 확인하는 절차는 브라우저 자동화 도구 연결 시 추가로 수행한다.
+- Phase 3 6~7단계는 코드/자동 테스트(vitest) 레벨 검증까지는 완료되었으나, 브라우저 수동 확인은 브라우저 자동화 도구(Playwright MCP) 연결이 끊겨 있어 아직 진행하지 못했다.
 - Phase 3 8단계(git push)는 현재 저장소가 git으로 초기화되어 있지 않아 `git init` 및 원격 저장소 설정이 선행되어야 한다. 원격 저장소 주소 등은 추측하지 않고 사용자에게 확인한다(절대 규칙 1).
 - 확장 단계(JWT 로그인, 팀, Kanban, 채팅, CI/CD, PostgreSQL 전환 등)는 이 문서에 포함하지 않으며, 착수 시점에 별도 문서(`06-extensions.md` 등)로 다룬다.
