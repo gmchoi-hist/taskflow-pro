@@ -20,6 +20,29 @@ function formatDueBadge(dueAt) {
   return { text: `D-${days} ${pad(hours)}:${pad(minutes)}`, overdue: false };
 }
 
+const RELATIVE_TIME_FORMATTER = new Intl.RelativeTimeFormat("ko", { numeric: "auto" });
+const ABSOLUTE_DATE_FORMATTER = new Intl.DateTimeFormat("ko", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function formatCreatedAt(createdAt) {
+  const date = new Date(createdAt);
+  const diffMinutes = Math.floor((Date.now() - date.getTime()) / 60000);
+
+  if (diffMinutes < 1) return "방금 전";
+  if (diffMinutes < 60) return RELATIVE_TIME_FORMATTER.format(-diffMinutes, "minute");
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return RELATIVE_TIME_FORMATTER.format(-diffHours, "hour");
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return RELATIVE_TIME_FORMATTER.format(-diffDays, "day");
+
+  return ABSOLUTE_DATE_FORMATTER.format(date);
+}
+
 function el(tag, className, children = []) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -151,6 +174,12 @@ function renderTaskCard(task, { onCardClick, onDelete }) {
     onDelete(task.id);
   });
 
+  const createdAtText = el(
+    "span",
+    "text-xs text-slate-500 dark:text-slate-400",
+    `생성: ${formatCreatedAt(task.created_at)}`
+  );
+
   const card = el(
     "div",
     "task-card rounded-xl shadow-lg backdrop-blur bg-white/60 dark:bg-slate-800/60 border border-black/5 dark:border-white/10 p-4 flex items-center justify-between gap-3 cursor-pointer",
@@ -158,6 +187,7 @@ function renderTaskCard(task, { onCardClick, onDelete }) {
       el("div", "flex flex-col gap-2 min-w-0", [
         el("h3", "font-medium truncate", task.title),
         el("div", "flex gap-2", [statusBadge, dueBadge]),
+        createdAtText,
       ]),
       deleteBtn,
     ]
@@ -219,4 +249,4 @@ export function renderApp({ onAddClick, onCreateSubmit, onCreateCancel, onEditSu
   }
 }
 
-export { formatDueBadge };
+export { formatDueBadge, formatCreatedAt };
