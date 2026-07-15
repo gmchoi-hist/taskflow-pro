@@ -1,0 +1,222 @@
+import * as state from "./state.js";
+import { getCurrentTheme, toggleTheme } from "./theme.js";
+
+const STATUS_LABEL = { todo: "할 일", in_progress: "진행 중", done: "완료" };
+const STATUS_BADGE_CLASS = {
+  todo: "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200",
+  in_progress: "bg-amber-200 text-amber-800 dark:bg-amber-700 dark:text-amber-100",
+  done: "bg-emerald-200 text-emerald-800 dark:bg-emerald-700 dark:text-emerald-100",
+};
+
+function formatDueBadge(dueAt) {
+  if (!dueAt) return { text: "마감 없음", overdue: false };
+  const diffMs = new Date(dueAt).getTime() - Date.now();
+  if (diffMs < 0) return { text: "기한 초과", overdue: true };
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return { text: `D-${days} ${pad(hours)}:${pad(minutes)}`, overdue: false };
+}
+
+function el(tag, className, children = []) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  for (const child of [].concat(children)) {
+    if (child == null) continue;
+    node.append(child instanceof Node ? child : document.createTextNode(child));
+  }
+  return node;
+}
+
+function button(label, className, onClick) {
+  const btn = el("button", `min-h-11 min-w-11 ${className}`, label);
+  btn.type = "button";
+  btn.addEventListener("click", onClick);
+  return btn;
+}
+
+function renderHeader(root, { onAddClick }) {
+  const title = el("h1", "text-2xl font-semibold", "TaskFlow Pro");
+
+  const themeBtn = button(
+    getCurrentTheme() === "dark" ? "☀️ 라이트 모드" : "🌙 다크 모드",
+    "rounded-xl px-3 py-2 bg-white/60 dark:bg-slate-800/60 shadow-lg backdrop-blur border border-black/5 dark:border-white/10",
+    () => {
+      toggleTheme();
+      renderApp();
+    }
+  );
+
+  const addBtn = button(
+    "+ 태스크 추가",
+    "rounded-xl px-3 py-2 bg-blue-600 text-white shadow-lg",
+    onAddClick
+  );
+
+  const actions = el("div", "flex items-center gap-2", [themeBtn, addBtn]);
+  const header = el(
+    "header",
+    "flex items-center justify-between gap-4 mb-6",
+    [title, actions]
+  );
+  root.append(header);
+}
+
+function renderTaskForm({ initialTask, onSubmit, onCancel }) {
+  const titleInput = el("input", "w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-slate-800/70 px-3 py-2 min-h-11");
+  titleInput.placeholder = "태스크 제목";
+  titleInput.value = initialTask?.title ?? "";
+
+  const dueInput = el("input", "w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-slate-800/70 px-3 py-2 min-h-11");
+  dueInput.type = "datetime-local";
+  if (initialTask?.due_at) {
+    const d = new Date(initialTask.due_at);
+    const pad = (n) => String(n).padStart(2, "0");
+    dueInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  const statusSelect = el("select", "w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-slate-800/70 px-3 py-2 min-h-11");
+  for (const [value, label] of Object.entries(STATUS_LABEL)) {
+    const option = el("option", null, label);
+    option.value = value;
+    if ((initialTask?.status ?? "todo") === value) option.selected = true;
+    statusSelect.append(option);
+  }
+
+  const descriptionInput = el("textarea", "w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-slate-800/70 px-3 py-2");
+  descriptionInput.placeholder = "설명 (선택)";
+  descriptionInput.value = initialTask?.description ?? "";
+
+  const errorText = el("p", "text-red-600 text-sm hidden");
+
+  const submitBtn = button(
+    initialTask ? "수정" : "추가",
+    "rounded-xl px-4 py-2 bg-blue-600 text-white shadow-lg",
+    async () => {
+      if (!titleInput.value.trim()) {
+        errorText.textContent = "제목을 입력해주세요";
+        errorText.classList.remove("hidden");
+        return;
+      }
+      try {
+        await onSubmit({
+          title: titleInput.value.trim(),
+          description: descriptionInput.value || undefined,
+          status: statusSelect.value,
+          due_at: dueInput.value || undefined,
+        });
+      } catch (err) {
+        errorText.textContent = err instanceof Error ? err.message : "저장에 실패했습니다";
+        errorText.classList.remove("hidden");
+      }
+    }
+  );
+
+  const cancelBtn = button("취소", "rounded-xl px-4 py-2 bg-white/60 dark:bg-slate-700/60", onCancel);
+
+  const form = el(
+    "div",
+    "task-form rounded-xl shadow-lg backdrop-blur bg-white/60 dark:bg-slate-800/60 border border-black/5 dark:border-white/10 p-4 mb-4 flex flex-col gap-3",
+    [
+      el("label", "flex flex-col gap-1 text-sm", ["제목", titleInput]),
+      el("label", "flex flex-col gap-1 text-sm", ["설명", descriptionInput]),
+      el("label", "flex flex-col gap-1 text-sm", ["상태", statusSelect]),
+      el("label", "flex flex-col gap-1 text-sm", ["마감 일시", dueInput]),
+      errorText,
+      el("div", "flex gap-2", [submitBtn, cancelBtn]),
+    ]
+  );
+  return form;
+}
+
+function renderTaskCard(task, { onCardClick, onDelete }) {
+  const badge = formatDueBadge(task.due_at);
+
+  const statusBadge = el(
+    "span",
+    `text-xs px-2 py-1 rounded-xl ${STATUS_BADGE_CLASS[task.status]}`,
+    STATUS_LABEL[task.status]
+  );
+
+  const dueBadge = el(
+    "span",
+    `text-xs px-2 py-1 rounded-xl ${badge.overdue ? "bg-red-200 text-red-800 dark:bg-red-700 dark:text-red-100" : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"}`,
+    badge.text
+  );
+
+  const deleteBtn = button("🗑", "rounded-xl px-2 py-2 bg-white/60 dark:bg-slate-700/60", (e) => {
+    e.stopPropagation();
+    onDelete(task.id);
+  });
+
+  const card = el(
+    "div",
+    "task-card rounded-xl shadow-lg backdrop-blur bg-white/60 dark:bg-slate-800/60 border border-black/5 dark:border-white/10 p-4 flex items-center justify-between gap-3 cursor-pointer",
+    [
+      el("div", "flex flex-col gap-2 min-w-0", [
+        el("h3", "font-medium truncate", task.title),
+        el("div", "flex gap-2", [statusBadge, dueBadge]),
+      ]),
+      deleteBtn,
+    ]
+  );
+  card.dataset.status = task.status;
+  card.addEventListener("click", () => onCardClick(task.id));
+  return card;
+}
+
+function renderEditModal({ task, onSubmit, onCancel }) {
+  const overlay = el("div", "fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50");
+  const modal = el("div", "w-full max-w-md");
+  modal.append(renderTaskForm({ initialTask: task, onSubmit, onCancel }));
+  overlay.append(modal);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) onCancel();
+  });
+  return overlay;
+}
+
+export function renderApp({ onAddClick, onCreateSubmit, onCreateCancel, onEditSubmit, onEditCancel, onDelete }) {
+  const root = document.getElementById("app");
+  root.innerHTML = "";
+
+  renderHeader(root, { onAddClick });
+
+  if (state.isCreateFormOpen()) {
+    root.append(renderTaskForm({ onSubmit: onCreateSubmit, onCancel: onCreateCancel }));
+  }
+
+  const tasks = state.getTasks();
+  const list = el("div", "flex flex-col gap-3");
+  if (tasks.length === 0) {
+    list.append(el("p", "text-slate-500 dark:text-slate-400", "등록된 태스크가 없습니다."));
+  } else {
+    for (const task of tasks) {
+      list.append(
+        renderTaskCard(task, {
+          onCardClick: (id) => state.openEditModal(id),
+          onDelete,
+        })
+      );
+    }
+  }
+  root.append(list);
+
+  const editingTaskId = state.getEditingTaskId();
+  if (editingTaskId) {
+    const task = tasks.find((t) => t.id === editingTaskId);
+    if (task) {
+      root.append(
+        renderEditModal({
+          task,
+          onSubmit: (input) => onEditSubmit(task.id, input),
+          onCancel: onEditCancel,
+        })
+      );
+    }
+  }
+}
+
+export { formatDueBadge };
