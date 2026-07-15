@@ -57,6 +57,18 @@ def test_update_task_partial_200(client):
     assert body["title"] == "a"
 
 
+def test_update_task_invalid_status_returns_400(client):
+    created = client.post("/api/tasks", json={"title": "a"}).json()
+    res = client.put(f"/api/tasks/{created['id']}", json={"status": "invalid"})
+    assert res.status_code == 400
+
+
+def test_update_task_invalid_due_at_returns_400(client):
+    created = client.post("/api/tasks", json={"title": "a"}).json()
+    res = client.put(f"/api/tasks/{created['id']}", json={"due_at": "not-a-date"})
+    assert res.status_code == 400
+
+
 def test_update_task_not_found_returns_404(client):
     res = client.put("/api/tasks/does-not-exist", json={"status": "done"})
     assert res.status_code == 404
